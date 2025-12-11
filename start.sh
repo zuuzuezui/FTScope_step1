@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Start script used by Docker / Render
 # - ouvre un port HTTP minimal pour que Render détecte un port ouvert
 # - lance ensuite core1.py (le bot)
@@ -28,3 +28,5 @@ echo "core1.py exited. Stopping HTTP server (pid ${HTTP_PID})..."
 kill "${HTTP_PID}" 2>/dev/null || true
 wait "${HTTP_PID}" 2>/dev/null || true
 echo "Done."
+
+ss
