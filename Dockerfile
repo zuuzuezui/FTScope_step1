@@ -1,4 +1,31 @@
-# Image Python
+# Image Pythona# Base Python
+FROM python:3.11-slim
+
+# Variables d'environnement pour éviter les prompts interactifs
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Installer les dépendances nécessaires
+RUN apt-get update && apt-get install -y \
+    wget \
+    unzip \
+    curl \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copier le chromedriver dans le container
+COPY chromedriver /usr/local/bin/chromedriver
+RUN chmod +x /usr/local/bin/chromedriver
+
+# Copier le code et requirements
+COPY . /app
+WORKDIR /app
+
+# Installer Python packages
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Commande pour lancer le script
+CMD ["python", "main.py"]
+
 FROM python:3.11-slim
 
 # Installer Chrome
@@ -22,3 +49,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Définir le point d'entrée
 CMD ["bash", "start.sh"]
+
