@@ -6,8 +6,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 
 # Variables d'environnement
-X_USER = os.getenv("X_USER")
-X_PASS = os.getenv("X_PASS")
+TWITTER_USER = os.getenv("TWITTER_USER")
+TWITTER_PASS = os.getenv("TWITTER_PASS")
 
 def init_driver():
     chrome_options = Options()
@@ -55,3 +55,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
