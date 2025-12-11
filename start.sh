@@ -1,32 +1,92 @@
-#!/bin/bash
-# Start script used by Docker / Render
-# - ouvre un port HTTP minimal pour que Render détecte un port ouvert
-# - lance ensuite core1.py (le bot)
+#!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${PORT:-10000}"
+# --- normalize this file's line endings so shebang doesn't contain CRLF
+# (modify the file in-place, safe on Linux)
+if grep -q $'\r' "$0"; then
+  echo "[start.sh] Detected CRLF in this script — converting to LF"
+  sed -i 's/\r$//' "$0" || true
+fi
 
-# Start a minimal static HTTP server in background to keep the container "web" and expose $PORT.
-# This is a simple trick: python -m http.server is fine (serves current directory).
-# If tu as Flask ou un vrai endpoint, remplace cette ligne.
-echo "Starting minimal HTTP server on port ${PORT} (background)..."
-# redirect output to /dev/null to keep logs cleaner (adjust if you want logs)
-python3 -m http.server "${PORT}" >/dev/null 2>&1 &
+# --- helper: try to run a command quietly
+run_quiet() { command "$@" >/dev/null 2>&1; }
 
-HTTP_PID=$!
-echo "HTTP server started (pid ${HTTP_PID})"
+# --- ensure ss / netstat availability (used to inspect sockets)
+have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-# Give http server a moment
-sleep 0.5
+ensure_network_tool() {
+  if have_cmd ss || have_cmd netstat || have_cmd lsof; then
+    return 0
+  fi
 
-# Run the main script (core1.py)
-echo "Launching core1.py..."
-python3 core1.py
+  echo "[start.sh] 'ss' / 'netstat' / 'lsof' not found — attempting to install iproute2 (provides ss)"
+  if have_cmd apt-get; then
+    apt-get update && apt-get install -y iproute2 || {
+      echo "[start.sh] apt install failed, continuing without ss"
+      return 1
+    }
+  elif have_cmd apk; then
+    apk add --no-cache iproute2 || {
+      echo "[start.sh] apk add failed, continuing without ss"
+      return 1
+    }
+  elif have_cmd yum; then
+    yum install -y iproute || {
+      echo "[start.sh] yum install failed, continuing without ss"
+      return 1
+    }
+  else
+    echo "[start.sh] No supported package manager found (apt/yum/apk). Skipping install."
+    return 1
+  fi
+}
 
-# When core1.py exits, we gracefully stop the background http server
-echo "core1.py exited. Stopping HTTP server (pid ${HTTP_PID})..."
-kill "${HTTP_PID}" 2>/dev/null || true
-wait "${HTTP_PID}" 2>/dev/null || true
-echo "Done."
+# --- portable socket-listing function
+list_listening_ports() {
+  if have_cmd ss; then
+    ss -tuln
+  elif have_cmd netstat; then
+    netstat -tuln
+  elif have_cmd lsof; then
+    lsof -i -P -n
+  else
+    echo "[start.sh] No tool available to list sockets"
+    return 1
+  fi
+}
 
-ss
+# --- try to ensure tools (best-effort)
+ensure_network_tool || true
+
+# --- sensible defaults for env vars (override in Render dashboard / env file)
+: "${HEADLESS:=1}"       # default to headless for container environments
+: "${CHROME_BIN:=/usr/bin/chromium}"
+: "${WEB_CONCURRENCY:=1}"  # simple default
+export HEADLESS CHROME_BIN WEB_CONCURRENCY
+
+echo "[start.sh] HEADLESS=${HEADLESS}, CHROME_BIN=${CHROME_BIN}, WEB_CONCURRENCY=${WEB_CONCURRENCY}"
+
+# --- show listening ports (debug info)
+echo "[start.sh] Current listening ports (if any):"
+list_listening_ports || echo "[start.sh] (could not list ports)"
+
+# --- ensure python is unbuffered for logs
+PYTHON_CMD=${PYTHON_CMD:-python3}
+if ! command -v $PYTHON_CMD >/dev/null 2>&1; then
+  echo "[start.sh] Warning: $PYTHON_CMD not found in PATH"
+fi
+
+# --- Minimal HTTP server fallback (if you used one previously)
+# If your app expects a background "minimal HTTP server", keep it; otherwise remove.
+start_minimal_http_server() {
+  # If you have a small script to start a health-port, call it here.
+  # Example: python3 -m http.server 10000 &  # uncomment if needed
+  return 0
+}
+
+start_minimal_http_server || true
+
+# --- Launch main app (adjust command to your app's real entrypoint)
+# Use -u so python doesn't buffer stdout/stderr in containers
+echo "[start.sh] Launching core1.py..."
+exec $PYTHON_CMD -u core1.py
