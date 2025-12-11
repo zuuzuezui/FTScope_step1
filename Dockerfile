@@ -41,4 +41,5 @@ RUN pip install -r requirements.txt
 COPY . /app
 
 # Commande par défaut
-CMD ["python", "main.py"]
+CMD ["python", "core1.py"]
+
